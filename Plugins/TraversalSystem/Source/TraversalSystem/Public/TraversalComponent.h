@@ -85,11 +85,11 @@ struct FAnimationPropertySettings
 	UPROPERTY(EditAnywhere)
 	float AnimationHeightOffset;
 
-	// Lower bound used to pick a starting time (ratio from 0.0 to 1.0) for the mantle animation based on the mantle height. This will prevent the full animation from playing when the mantle distance is small.
+	// Lower bound used to pick a starting time for the mantle animation based on the mantle height. This will prevent the full animation from playing when the mantle distance is small.
 	UPROPERTY(EditAnywhere)
 	float InHeightA;
 
-	// Upper bound used to pick a starting time (ratio from 0.0 to 1.0) for the mantle animation based on the mantle height. This will prevent the full animation from playing when the mantle distance is small.
+	// Upper bound used to pick a starting time for the mantle animation based on the mantle height. This will prevent the full animation from playing when the mantle distance is small.
 	UPROPERTY(EditAnywhere)
 	float InHeightB;
 
@@ -150,8 +150,13 @@ protected:
 	// Warp target placed behind the object.
 	FVector LandWarpTarget;
 
-	
-	/* Vault */
+
+
+	// Z offset added to the capsule's starting position. Used for fine tuning when taking the height of the capsule component into account.
+	UPROPERTY(EditAnywhere, Category = "General")
+	float GlobalHeightOffsetZ;
+
+
 
 	// Max distance to object to initiate vault.
 	UPROPERTY(EditAnywhere, Category = "Vault")
@@ -201,8 +206,11 @@ protected:
 	UPROPERTY(EditAnywhere, Category = "Vault")
 	FName VaultLandWarpTargetName;
 
+	// Calculated height of the object to vault over. Will only be set after an attemp to vault.
+	UPROPERTY(BlueprintReadOnly, Category = "Vault")
+	float VaultHeight;
 
-	/* Mantle */
+
 
 	// Max distance to object to initiate mantle.
 	UPROPERTY(EditAnywhere, Category = "Mantle")
@@ -224,8 +232,11 @@ protected:
 	UPROPERTY(EditAnywhere, Category = "Mantle")
 	FName MantleWarpTargetName;
 
+	// Calculated height of the object to mantle on. Will only be set after an attempt to mantle.
+	UPROPERTY(BlueprintReadOnly, Category = "Mantle")
+	float MantleHeight;
 
-	/* Slide */
+
 
 	// Base slide power.
 	UPROPERTY(EditAnywhere, Category = "Slide")
@@ -252,7 +263,6 @@ protected:
 	float SlideMaxSpeed;
 
 	
-	/* Wall climb */
 
 	// Froward distance used to detect wall.
 	UPROPERTY(EditAnywhere, Category = "Wall Climb")
@@ -313,31 +323,31 @@ public:
 	UFUNCTION(BlueprintCallable)
 	void Initialize(ACharacter* Character);
 
-	/* Vault */
 	
+
 	/**
 	* Check if the character meets the requirements to vault.
 	*/
 	UFUNCTION(BlueprintCallable, Category = "Vault")
 	bool VaultCheck();
 
-	/* Mantle */
 	
+
 	/**
 	* Check if the character meets the requirements to mantle.
 	*/
 	UFUNCTION(BlueprintCallable, Category = "Mantle")
 	bool MantleCheck();
 
-	/* Slide */
 	
+
 	/**
 	* Check if the character meets the requirements to slide.
 	*/
 	UFUNCTION(BlueprintCallable, Category = "Slide")
 	bool SlideCheck();
 
-	/* Wall climb */
+
 
 	/**
 	* Check if the character meets the requirements to wall climb.
@@ -351,7 +361,6 @@ protected:
 	virtual void BeginPlay() override;
 
 
-	/* General */
 	
 	/**
 	* Get the most bottom point of the capsule component.
@@ -368,7 +377,7 @@ protected:
 	* @return Most bottom point of the capsule component.
 	*/
 	UFUNCTION(BlueprintCallable, BlueprintPure)
-	FVector GetCapsuleLocationFromBaseLocation(FVector BaseLocation, float ZOffset);
+	FVector GetCapsuleLocationFromBaseLocation(FVector BaseLocation);
 
 	/**
 	* Trace a sphere to check whether the capsule will collide with anything at the given location.
@@ -426,7 +435,6 @@ protected:
 	FAnimationProperties DetermineAnimationProperties(float Height, const TArray<FAnimationPropertySettings>& AnimationPropertySettings);
 
 
-	/* Vault */
 
 	/**
 	* Check if the depth of the actor can be vaulted over and if the character capsule fits after vault.
@@ -451,7 +459,6 @@ protected:
 	void VaultStart(UAnimMontage* VaultAnimation, float AnimationEndBlendTime);
 
 
-	/* Mantle */
 
 	/**
 	* Add height offset to warp target location.
@@ -472,7 +479,6 @@ protected:
 	void MantleStart(const FAnimationProperties& AnimationProperties);
 
 
-	/* Slide */
 
 	// Start slide
 	void SlideStart();
@@ -487,9 +493,7 @@ protected:
 	void SlideStop();
 
 
-	/* Wall climb */
 
-	// Shoot forward trace from offset
 	/**
 	* Shoot a trace forward from the character's location taking into account the offset.
 	* 
@@ -549,7 +553,6 @@ protected:
 	UFUNCTION(BlueprintCallable)
 	void WallClimbMovement(FVector Direction, float AxisValue);
 
-	// Perform trace to detect outward wall/turn
 	/**
 	* Shoot a trace inward to the left or right of the character depending on the input direction to detect walls for an outward turn.
 	* Gets called if the wall movement trace didn't hit anything.
@@ -573,4 +576,11 @@ protected:
 	*/
 	UFUNCTION(BlueprintCallable)
 	void WallClimbStop();
+
+	/**
+	* Check in each direction whether there is enough room to hold onto the wall by using the player capsule component's size.
+	* 
+	* @returns Whether there is room on each side of the character to start the wall climb.
+	*/
+	bool IsRoomToStartWallClimb();
 };
