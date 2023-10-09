@@ -60,10 +60,9 @@ FVector UTraversalComponent::GetCapsuleBaseLocation()
 	return PlayerCapsule->GetComponentLocation() - (PlayerCapsule->GetUpVector() * PlayerCapsule->GetScaledCapsuleHalfHeight());
 }
 
-FVector UTraversalComponent::GetCapsuleLocationFromBaseLocation(FVector BaseLocation, float ZOffset)
+FVector UTraversalComponent::GetCapsuleLocationFromBaseLocation(FVector BaseLocation)
 {
-	DrawDebugSphere(GetWorld(), BaseLocation + FVector(0.0f, 0.0f, PlayerCapsule->GetScaledCapsuleHalfHeight() + ZOffset), 10.0f, 12, FColor::Blue, false, 1.0f, 0, 2.0f);
-	return BaseLocation + FVector(0.0f, 0.0f, PlayerCapsule->GetScaledCapsuleHalfHeight() + ZOffset);
+	return BaseLocation + FVector(0.0f, 0.0f, PlayerCapsule->GetScaledCapsuleHalfHeight() + GlobalHeightOffsetZ);
 }
 
 bool UTraversalComponent::IsRoomForCapsule(FVector Location)
@@ -92,11 +91,10 @@ FIsObjectClimbableOut UTraversalComponent::IsObjectClimbable(float ReachDistance
 	const TArray<AActor*> ActorsToIgnore;
 	FHitResult Hit;
 
-	bool bHit = UKismetSystemLibrary::CapsuleTraceSingle(GetWorld(), Start, End, 5.0f, HalfHeight, DetectionTraceChannel, false, ActorsToIgnore, EDrawDebugTrace::ForDuration, Hit, true);
+	bool bHit = UKismetSystemLibrary::CapsuleTraceSingle(GetWorld(), Start, End, 5.0f, HalfHeight, DetectionTraceChannel, false, ActorsToIgnore, EDrawDebugTrace::None, Hit, true);
 	FIsObjectClimbableOut Out;
 	if (bHit && !Hit.bStartPenetrating && !PlayerCharacterMovement->IsWalkable(Hit))
 	{
-		GEngine->AddOnScreenDebugMessage(-1, 3.0f, FColor::Green, TEXT("climbable"));
 		Out.bIsNotWalkable = true;
 		Out.InitialImpactPoint = Hit.ImpactPoint;
 		Out.InitialImpactNormal = Hit.ImpactNormal;
@@ -104,7 +102,6 @@ FIsObjectClimbableOut UTraversalComponent::IsObjectClimbable(float ReachDistance
 	}
 	else
 	{
-		GEngine->AddOnScreenDebugMessage(-1, 3.0f, FColor::Green, TEXT("NOT climbable"));
 		Out.bIsNotWalkable = false;
 		Out.InitialImpactPoint = FVector(0.0f, 0.0f, 0.0f);
 		Out.InitialImpactNormal = FVector(0.0f, 0.0f, 0.0f);
@@ -114,12 +111,12 @@ FIsObjectClimbableOut UTraversalComponent::IsObjectClimbable(float ReachDistance
 
 FIsSurfaceWalkableOut UTraversalComponent::IsSurfaceWalkable(float MaxLedgeHeight, FVector InitialImpactPoint, FVector InitialImpactNormal)
 {
-	FVector End = PlayerCharacter->GetLastMovementInputVector() * 10.0f + FVector(InitialImpactPoint.X, InitialImpactPoint.Y, GetCapsuleBaseLocation().Z);
+	FVector End = PlayerCharacter->GetLastMovementInputVector() * 15.0f + FVector(InitialImpactPoint.X, InitialImpactPoint.Y, GetCapsuleBaseLocation().Z);
 	FVector Start = End + FVector(0.0f, 0.0f, MaxLedgeHeight + 30.0f);
 	const TArray<AActor*> ActorsToIgnore;
 	FHitResult Hit;
 
-	bool bHit = UKismetSystemLibrary::SphereTraceSingle(GetWorld(), Start, End, 5.0f, DetectionTraceChannel, false, ActorsToIgnore, EDrawDebugTrace::None, Hit, true);
+	bool bHit = UKismetSystemLibrary::SphereTraceSingle(GetWorld(), Start, End, 5.0f, DetectionTraceChannel, false, ActorsToIgnore, EDrawDebugTrace::ForDuration, Hit, true, FLinearColor::Red);
 	FIsSurfaceWalkableOut Out;
 	if (bHit && PlayerCharacterMovement->IsWalkable(Hit))
 	{
@@ -138,7 +135,7 @@ FIsSurfaceWalkableOut UTraversalComponent::IsSurfaceWalkable(float MaxLedgeHeigh
 bool UTraversalComponent::IsCapsulePathClear(float Height, FVector EndTargetLocation)
 {
 	FVector Start = PlayerCharacter->GetActorLocation() + PlayerCharacter->GetActorUpVector() * Height;
-	FVector End = GetCapsuleLocationFromBaseLocation(EndTargetLocation, 2.0f);
+	FVector End = GetCapsuleLocationFromBaseLocation(EndTargetLocation);
 	const TArray<AActor*> ActorsToIgnore;
 	FHitResult Hit;
 	
@@ -153,9 +150,9 @@ FAnimationProperties UTraversalComponent::DetermineAnimationProperties(float Hei
 
 	for (const FAnimationPropertySettings& PropertySetting : AnimationPropertySettings)
 	{
-		//GEngine->AddOnScreenDebugMessage(-1, 3.0f, FColor::Green, FString::SanitizeFloat(Height));
 		if (IsValid(PropertySetting.Animation) && UKismetMathLibrary::InRange_FloatFloat(Height, PropertySetting.AnimationMinHeight, PropertySetting.AnimationMaxHeight))
 		{
+			UE_LOG(LogTemp, Warning, TEXT("DetermineProp"));
 			Out.Animation = PropertySetting.Animation;
 			Out.AnimationHeightOffset = PropertySetting.AnimationHeightOffset;
 			Out.AnimationStartingPosition = UKismetMathLibrary::MapRangeClamped(Height, PropertySetting.InHeightA, PropertySetting.InHeightB, PropertySetting.StartingPositionA, PropertySetting.StartingPositionA);
@@ -163,16 +160,16 @@ FAnimationProperties UTraversalComponent::DetermineAnimationProperties(float Hei
 			return Out;
 		}
 	}
-
-	Out.Animation = nullptr;
-	Out.AnimationHeightOffset = 0.0f;
-	Out.AnimationStartingPosition = 0.0f;
-	Out.AnimationEndBlendTime = 0.0f;
-	return Out;
+	return { nullptr };
+		/*Out.Animation = nullptr;
+		Out.AnimationHeightOffset = 0.0f;
+		Out.AnimationStartingPosition = 0.0f;
+		Out.AnimationEndBlendTime = 0.0f;
+		return Out;*/
 }
 
 
-// Vault
+/* Vault */
 
 bool UTraversalComponent::VaultCheck()
 {
@@ -201,13 +198,12 @@ bool UTraversalComponent::VaultCheck()
 	int32 ApproachAngle = UKismetMathLibrary::Round(UKismetMathLibrary::Abs(ApproachAngleDotProduct) * 90.0f);
 
 	// Check if it can start the vault with current approach angle
-	if (ApproachAngle <= VaultMaxApproachAngle)
+	if (ApproachAngle < VaultMaxApproachAngle)
 	{
 		return false;
 	}
 
 	FVector WalkableImpactPoint;
-	float VaultHeight;
 
 	// Trace downward from the initial trace's impact point and determine if the hit location is walkable. If it is, set impact point as object start sync point
 	FIsSurfaceWalkableOut IsWalkableSurfaceReturnValue = IsSurfaceWalkable(VaultMaxLedgeHeight, InitialTraceImpactPoint, InitialTraceImpactNormal);
@@ -216,11 +212,12 @@ bool UTraversalComponent::VaultCheck()
 	{
 		WalkableImpactPoint = IsWalkableSurfaceReturnValue.WalkableImpactPoint;
 		ObjectStartWarpTarget = WalkableImpactPoint;
-		FVector VaultHeightVec = GetCapsuleLocationFromBaseLocation(WalkableImpactPoint, 2.0f) - PlayerCharacter->GetActorLocation();
+		FVector VaultHeightVec = GetCapsuleLocationFromBaseLocation(WalkableImpactPoint) - PlayerCharacter->GetActorLocation();
 		VaultHeight = VaultHeightVec.Z;
+		UE_LOG(LogTemp, Display, TEXT("Vault height: %f"), VaultHeight);
 
 		// Check if vault height isn't higher than the max vault ledge height
-		if (VaultHeight > VaultMaxLedgeHeight)
+		if (VaultHeight >= VaultMaxLedgeHeight)
 		{
 			return false;
 		}
@@ -255,10 +252,17 @@ bool UTraversalComponent::VaultCheck()
 
 	// Determine correct vault animation properties based on vault height
 	FAnimationProperties VaultAnimationProperties = DetermineAnimationProperties(VaultHeight, VaultAnimationPropertySettings);
-
-	VaultStart(VaultAnimationProperties.Animation, VaultAnimationProperties.AnimationEndBlendTime);
-
-	return true;
+	
+	// Start mantle
+	if (IsValid(VaultAnimationProperties.Animation))
+	{
+		VaultStart(VaultAnimationProperties.Animation, VaultAnimationProperties.AnimationEndBlendTime);
+		return true;
+	}
+	else
+	{
+		return false;
+	}
 }
 
 FCanVaultOverDepthOut UTraversalComponent::CanVaultOverDepth()
@@ -344,7 +348,7 @@ void UTraversalComponent::VaultStart(UAnimMontage* VaultAnimation, float Animati
 }
 
 
-// Mantle
+/* Mantle */
 
 bool UTraversalComponent::MantleCheck()
 {
@@ -370,7 +374,6 @@ bool UTraversalComponent::MantleCheck()
 	}
 
 	FVector WalkableImpactPoint;
-	float MantleHeight;
 
 	// Trace downward from the initial trace's impact point and determine if the hit location is walkable. If it is, set impact point as object start sync point
 	FIsSurfaceWalkableOut IsWalkableSurfaceReturnValue = IsSurfaceWalkable(MantleMaxLedgeHeight, InitialTraceImpactPoint, InitialTraceImpactNormal);
@@ -379,9 +382,9 @@ bool UTraversalComponent::MantleCheck()
 	{
 		WalkableImpactPoint = IsWalkableSurfaceReturnValue.WalkableImpactPoint;
 		ObjectStartWarpTarget = WalkableImpactPoint;
-		FVector MantleHeightVec = GetCapsuleLocationFromBaseLocation(WalkableImpactPoint, 2.0f) - PlayerCharacter->GetActorLocation();
-		MantleHeight = MantleHeightVec.Z - 2.0f;
-		GEngine->AddOnScreenDebugMessage(-1, 3.0f, FColor::Green, FString::SanitizeFloat(MantleHeight));
+		FVector MantleHeightVec = GetCapsuleLocationFromBaseLocation(WalkableImpactPoint) - PlayerCharacter->GetActorLocation();
+		MantleHeight = MantleHeightVec.Z;
+		UE_LOG(LogTemp, Display, TEXT("Mantle height: %f"), VaultHeight);
 
 		// Check if mantle height isn't higher than the max mantle ledge height
 		if (MantleHeight > MantleMaxLedgeHeight)
@@ -402,21 +405,19 @@ bool UTraversalComponent::MantleCheck()
 		return false;
 	}
 
-	/*UAnimMontage* MantleAnimation;
-	float AnimationHeightOffset;
-	float AnimationStartingPosition;*/
-
 	// Determine correct mantle animation based on mantle height
 	FAnimationProperties MantleAnimationProperties = DetermineAnimationProperties(MantleHeight, MantleAnimationPropertySettings);
 
-	/*MantleAnimation = MantleAnimationProperties.Animation;
-	AnimationHeightOffset = MantleAnimationProperties.AnimationHeightOffset;
-	AnimationStartingPosition = MantleAnimationProperties.AnimationStartingPosition;*/
-
 	// Start mantle
-	MantleStart(MantleAnimationProperties);
-
-	return true;
+	if (IsValid(MantleAnimationProperties.Animation))
+	{
+		MantleStart(MantleAnimationProperties);
+		return true;
+	}
+	else
+	{
+		return false;
+	}
 }
 
 float UTraversalComponent::ApplyMantleHeightOffset(float HeightOffset)
@@ -443,13 +444,13 @@ void UTraversalComponent::MantleStart(const FAnimationProperties& AnimationPrope
 }
 
 
-// Slide
+/* Slide */
+
 //bool UTraversalComponent::CanSlide()
 //{
 //	return TraversalState == ETraversalState::None && !PlayerCharacterMovement->IsFalling();
 //}
 
-// Check if player can slide
 bool UTraversalComponent::SlideCheck()
 {
 	if (TraversalState == ETraversalState::None && !PlayerCharacterMovement->IsFalling())
@@ -463,7 +464,6 @@ bool UTraversalComponent::SlideCheck()
 	}
 }
 
-// Start slide
 void UTraversalComponent::SlideStart()
 {
 	TraversalState = ETraversalState::Sliding;
@@ -471,7 +471,6 @@ void UTraversalComponent::SlideStart()
 	PlayerCharacterMovement->BrakingDecelerationWalking = SlideBrakingPower;
 }
 
-// Slide update
 void UTraversalComponent::SlideUpdate()
 {
 	FFindFloorResult FloorHit = PlayerCharacterMovement->CurrentFloor;
@@ -497,7 +496,6 @@ void UTraversalComponent::SlideUpdate()
 	}
 }
 
-// Calculate the force applied while sliding
 FVector UTraversalComponent::CalculateSlideForce(FVector FloorNormal)
 {
 	FVector ForwardForce = PlayerCharacter->GetActorForwardVector() * SlidePower;
@@ -527,7 +525,6 @@ FVector UTraversalComponent::CalculateSlideForce(FVector FloorNormal)
 	return ForwardForce + FloorForce;
 }
 
-// Slide stop
 void UTraversalComponent::SlideStop()
 {
 	TraversalState = ETraversalState::None;
@@ -536,7 +533,7 @@ void UTraversalComponent::SlideStop()
 }
 
 
-// Wall climb
+/* Wall climb */
 
 FHitResult UTraversalComponent::ForwardTrace(FVector Offset)
 {
@@ -557,9 +554,9 @@ bool UTraversalComponent::WallClimbCheck()
 	{
 		return false;
 	}
-
+	
 	FHitResult TraceResult = ForwardTrace(FVector(0.0f, 0.0f, 0.0f));
-	if (TraceResult.bBlockingHit)
+	if (IsRoomToStartWallClimb())
 	{
 		WallClimbStart(TraceResult);
 		return true;
@@ -646,8 +643,6 @@ void UTraversalComponent::WallClimbMovement(FVector Direction, float AxisValue)
 	//FHitResult ClimbTraceHit;
 
 	FVector CurrentWallNormal = ForwardTraceHit.Normal;
-	FVector TargetLocation;
-	FVector TargetNormal;
 
 	// Check if there is axis input
 	if (AxisValue != 0.0f)
@@ -658,8 +653,8 @@ void UTraversalComponent::WallClimbMovement(FVector Direction, float AxisValue)
 
 		if (DirectionalTraceHit.bBlockingHit)
 		{
-			TargetLocation = DirectionalTraceHit.Location;
-			TargetNormal = DirectionalTraceHit.Normal;
+			FVector TargetLocation = DirectionalTraceHit.Location;
+			FVector TargetNormal = DirectionalTraceHit.Normal;
 
 			FVector ClimbUnitDirection = UKismetMathLibrary::GetDirectionUnitVector(PlayerCharacter->GetActorLocation(), TargetLocation + (TargetNormal * PlayerCapsule->GetScaledCapsuleRadius()));
 			FVector ClimbDirection;
@@ -730,4 +725,31 @@ void UTraversalComponent::WallClimbStop()
 	PlayerCharacterMovement->SetMovementMode(MOVE_Walking);
 	PlayerCharacterMovement->bOrientRotationToMovement = true;
 	PlayerCharacterMovement->StopMovementImmediately();
+}
+
+bool UTraversalComponent::IsRoomToStartWallClimb()
+{
+	TArray<AActor*> ActorsToIgnore;
+
+	FVector TopStart = PlayerCharacter->GetActorLocation() + FVector(0.0f, 0.0f, 1.0f) * DirectionalTraceDistance;
+	FVector TopEnd = TopStart + PlayerCharacter->GetActorForwardVector() * WallDetectionDistance;
+	FHitResult TopHit;
+	UKismetSystemLibrary::LineTraceSingle(GetWorld(), TopStart, TopEnd, DetectionTraceChannel, false, ActorsToIgnore, EDrawDebugTrace::ForDuration, TopHit, true, FLinearColor::Black);
+
+	FVector BottomStart = PlayerCharacter->GetActorLocation() + FVector(0.0f, 0.0f, -1.0f) * DirectionalTraceDistance;
+	FVector BottomEnd = BottomStart + PlayerCharacter->GetActorForwardVector() * WallDetectionDistance;
+	FHitResult BottomHit;
+	UKismetSystemLibrary::LineTraceSingle(GetWorld(), BottomStart, BottomEnd, DetectionTraceChannel, false, ActorsToIgnore, EDrawDebugTrace::ForDuration, BottomHit, true, FLinearColor::Black);
+
+	FVector RightStart = PlayerCharacter->GetActorLocation() + PlayerCharacter->GetActorRightVector() * DirectionalTraceDistance;
+	FVector RightEnd = RightStart + PlayerCharacter->GetActorForwardVector() * WallDetectionDistance;
+	FHitResult RightHit;
+	UKismetSystemLibrary::LineTraceSingle(GetWorld(), RightStart, RightEnd, DetectionTraceChannel, false, ActorsToIgnore, EDrawDebugTrace::ForDuration, RightHit, true, FLinearColor::Black);
+
+	FVector LeftStart = PlayerCharacter->GetActorLocation() + (PlayerCharacter->GetActorRightVector() * -1.0f) * DirectionalTraceDistance;
+	FVector LeftEnd = LeftStart + PlayerCharacter->GetActorForwardVector() * WallDetectionDistance;
+	FHitResult LeftHit;
+	UKismetSystemLibrary::LineTraceSingle(GetWorld(), LeftStart, LeftEnd, DetectionTraceChannel, false, ActorsToIgnore, EDrawDebugTrace::ForDuration, LeftHit, true, FLinearColor::Black);
+
+	return TopHit.bBlockingHit && BottomHit.bBlockingHit && RightHit.bBlockingHit && LeftHit.bBlockingHit && ForwardTrace(FVector(0.0f, 0.0f, 0.0f)).bBlockingHit;
 }
