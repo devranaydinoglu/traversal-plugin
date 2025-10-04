@@ -1,4 +1,4 @@
-// Fill out your copyright notice in the Description page of Project Settings.
+// Copyright 2023 devran. All Rights Reserved.
 
 #pragma once
 
@@ -25,9 +25,9 @@ struct FIsObjectClimbableOut
 {
 	GENERATED_BODY()
 
-	bool bIsNotWalkable;
-	FVector InitialImpactPoint;
-	FVector InitialImpactNormal;
+	bool bIsNotWalkable = false;
+	FVector InitialImpactPoint = FVector::ZeroVector;
+	FVector InitialImpactNormal = FVector::ZeroVector;
 };
 
 USTRUCT()
@@ -35,8 +35,8 @@ struct FIsSurfaceWalkableOut
 {
 	GENERATED_BODY()
 
-	bool bIsWalkable;
-	FVector WalkableImpactPoint;
+	bool bIsWalkable = false;
+	FVector WalkableImpactPoint = FVector::ZeroVector;
 };
 
 USTRUCT()
@@ -44,8 +44,8 @@ struct FCanVaultOverDepthOut
 {
 	GENERATED_BODY()
 
-	bool bCanVaultOverDepth;
-	FVector DepthImpactPoint;
+	bool bCanVaultOverDepth = false;
+	FVector DepthImpactPoint = FVector::ZeroVector;
 };
 
 USTRUCT()
@@ -54,11 +54,11 @@ struct FAnimationProperties
 	GENERATED_BODY()
 
 	UPROPERTY()
-	UAnimMontage* Animation;
+	UAnimMontage* Animation = nullptr;
 
-	float AnimationHeightOffset;
-	double AnimationStartingPosition;
-	float AnimationEndBlendTime;
+	float AnimationHeightOffset = 0.0f;
+	double AnimationStartingPosition = 0.0;
+	float AnimationEndBlendTime = 0.0f;
 };
 
 /**
@@ -71,39 +71,39 @@ struct FAnimationPropertySettings
 
 	// Animation to be played.
 	UPROPERTY(EditAnywhere)
-	UAnimMontage* Animation;
+	UAnimMontage* Animation = nullptr;
 
 	// Min height at which this animation should be played.
 	UPROPERTY(EditAnywhere)
-	float AnimationMinHeight;
+	float AnimationMinHeight = 0.0f;
 
 	// Max height at which this animation should be played.
 	UPROPERTY(EditAnywhere)
-	float AnimationMaxHeight;
+	float AnimationMaxHeight = 0.0f;
 
-	// Fffset added to the start warp target's Z axis. Can be used to tweak the target height so the character's hand position in the animation is perfectly aligned with the ledge.
+	// Offset added to the start warp target's Z axis. Can be used to tweak the target height so the character's hand position in the animation is perfectly aligned with the ledge.
 	UPROPERTY(EditAnywhere)
-	float AnimationHeightOffset;
+	float AnimationHeightOffset = 0.0f;
 
 	// Lower bound used to pick a starting time for the mantle animation based on the mantle height. This will prevent the full animation from playing when the mantle distance is small.
 	UPROPERTY(EditAnywhere)
-	float InHeightA;
+	float InHeightA = 0.0f;
 
 	// Upper bound used to pick a starting time for the mantle animation based on the mantle height. This will prevent the full animation from playing when the mantle distance is small.
 	UPROPERTY(EditAnywhere)
-	float InHeightB;
+	float InHeightB = 0.0f;
 
 	// Starting time (ratio from 0.0 to 1.0) of the mantle animation used for the height's lower bound (InHeightA). Higher value means that a smaller portion of the mantle animation will be played.
 	UPROPERTY(EditAnywhere)
-	float StartingPositionA;
+	float StartingPositionA = 0.0f;
 
 	// Starting time (ratio from 0.0 to 1.0) of the mantle animation used for the height's upper bound (InHeightB). Lower value means that a bigger portion of the mantle animation will be played.
 	UPROPERTY(EditAnywhere)
-	float StartingPositionB;
+	float StartingPositionB = 0.0f;
 
 	// The time in seconds that will be cut off from the end of the animation to allow for better blending.
 	UPROPERTY(EditAnywhere)
-	float AnimationEndBlendTime;
+	float AnimationEndBlendTime = 0.0f;
 };
 
 UCLASS( ClassGroup=(Custom), meta=(BlueprintSpawnableComponent) )
@@ -308,6 +308,16 @@ protected:
 	UPROPERTY(EditAnywhere, Category = "Wall Climb|Outward Turn")
 	UAnimMontage* RightOutwardTurnAnimation;
 
+	UPROPERTY(BlueprintReadOnly, Category = "Wall Climb")
+	float WallClimbHorizontalInput;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Wall Climb")
+	float WallClimbVerticalInput;
+
+	bool bWallClimbIsTurning = false;
+
+	FTimerHandle WallClimbTurnMontageCompletedHandle;
+
 public:
 	// Sets default values for this component's properties.
 	UTraversalComponent();
@@ -323,15 +333,11 @@ public:
 	UFUNCTION(BlueprintCallable)
 	void Initialize(ACharacter* Character);
 
-	
-
 	/**
 	* Check if the character meets the requirements to vault.
 	*/
 	UFUNCTION(BlueprintCallable, Category = "Vault")
 	bool VaultCheck();
-
-	
 
 	/**
 	* Check if the character meets the requirements to mantle.
@@ -339,15 +345,11 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Mantle")
 	bool MantleCheck();
 
-	
-
 	/**
 	* Check if the character meets the requirements to slide.
 	*/
 	UFUNCTION(BlueprintCallable, Category = "Slide")
 	bool SlideCheck();
-
-
 
 	/**
 	* Check if the character meets the requirements to wall climb.
@@ -355,13 +357,10 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Wall Climb")
 	bool WallClimbCheck();
 
-
 protected:
 	// Called when the game starts
 	virtual void BeginPlay() override;
 
-
-	
 	/**
 	* Get the most bottom point of the capsule component.
 	* 
@@ -386,11 +385,6 @@ protected:
 	* @returns Room for capsule.
 	*/
 	bool IsRoomForCapsule(FVector Location);
-
-	/**
-	* Reset movement mode to walking and traversal state to none.
-	*/
-	void OnMontageCompleted();
 
 	/**
 	* Check if the object is within reach.
@@ -458,6 +452,10 @@ protected:
 	*/
 	void VaultStart(UAnimMontage* VaultAnimation, float AnimationEndBlendTime);
 
+	/**
+	* Reset movement mode to walking and traversal state to none.
+	*/
+	void OnVaultMontageCompleted(float AnimationEndBlendTime);
 
 
 	/**
@@ -478,6 +476,10 @@ protected:
 	*/
 	void MantleStart(const FAnimationProperties& AnimationProperties);
 
+	/**
+	* Reset movement mode to walking and traversal state to none.
+	*/
+	void OnMantleMontageCompleted(float AnimationEndBlendTime);
 
 
 	// Start slide
@@ -508,6 +510,19 @@ protected:
 	* @param ForwardTraceHit Hit result of the forward trace.
 	*/
 	void WallClimbStart(FHitResult& ForwardTraceHit);
+
+	/**
+	* Reset the traversal state and character movement component to walking state.
+	*/
+	UFUNCTION(BlueprintCallable)
+	void WallClimbStop();
+
+	/**
+	* Check in each direction whether there is enough room to hold onto the wall by using the player capsule component's size.
+	*
+	* @returns Whether there is room on each side of the character to start the wall climb.
+	*/
+	bool IsRoomToStartWallClimb();
 
 	/**
 	* Check if the target wall can be climbed onto based on the angle between the current wall and the target wall.
@@ -545,18 +560,9 @@ protected:
 	FHitResult WallClimbDirectionalTrace(FVector Direction, float AxisValue);
 
 	/**
-	* Handle movement during wall climb. Move the character towards the input direction.
-	* 
-	* @param Direction Input movement direction of the character. Used to determine the movement direction.
-	* @param AxisValue Input movement value of the character. Used to determine the movement direction.
-	*/
-	UFUNCTION(BlueprintCallable)
-	void WallClimbMovement(FVector Direction, float AxisValue);
-
-	/**
 	* Shoot a trace inward to the left or right of the character depending on the input direction to detect walls for an outward turn.
 	* Gets called if the wall movement trace didn't hit anything.
-	* 
+	*
 	* @param Direction Input movement direction of the character. Used to determine the traces' directions.
 	* @param AxisValue Input movement value of the character. Used to determine the traces' directions.
 	* @param CurrentWallNormal Normal of the wall the character is currently on.
@@ -566,21 +572,21 @@ protected:
 
 	/**
 	* Play the correct outward turn animation.
-	* 
+	*
 	* @param AxisValue Input movement value of the character. Used to check the turn direction.
 	*/
 	void WallClimbOutwardTurn(float AxisValue);
 
 	/**
-	* Reset the traversal state and character movement component to walking state.
+	* Handle movement during wall climb. Move the character towards the input direction.
+	* 
+	* @param Direction Input movement direction of the character. Used to determine the movement direction.
+	* @param AxisValue Input movement value of the character. Used to determine the movement direction.
 	*/
 	UFUNCTION(BlueprintCallable)
-	void WallClimbStop();
+	void WallClimbMovement(FVector2D Direction);
 
-	/**
-	* Check in each direction whether there is enough room to hold onto the wall by using the player capsule component's size.
-	* 
-	* @returns Whether there is room on each side of the character to start the wall climb.
-	*/
-	bool IsRoomToStartWallClimb();
+	void SetWallClimbAnimationMovementDirections(FVector Direction);
+
+	void OnWallClimbTurnMontageCompleted();
 };
