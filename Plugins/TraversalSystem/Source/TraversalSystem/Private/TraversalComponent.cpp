@@ -1,5 +1,4 @@
-// Fill out your copyright notice in the Description page of Project Settings.
-
+// Copyright 2023 devran. All Rights Reserved.
 
 #include "TraversalComponent.h"
 #include "GameFramework/Character.h"
@@ -53,7 +52,7 @@ void UTraversalComponent::Initialize(ACharacter* Character)
 	DefaultBrakingDeceleration = PlayerCharacterMovement->BrakingDecelerationWalking;
 }
 
-/* General */
+/***** General *****/
 
 FVector UTraversalComponent::GetCapsuleBaseLocation()
 {
@@ -77,12 +76,6 @@ bool UTraversalComponent::IsRoomForCapsule(FVector Location)
 	return !Hit.bBlockingHit && !Hit.bStartPenetrating;
 }
 
-void UTraversalComponent::OnMontageCompleted()
-{
-	PlayerCharacterMovement->SetMovementMode(MOVE_Walking);
-	TraversalState = ETraversalState::None;
-}
-
 FIsObjectClimbableOut UTraversalComponent::IsObjectClimbable(float ReachDistance, float MinLedgeHeight, float MaxLedgeHeight)
 {
 	FVector Start = (GetCapsuleBaseLocation() + PlayerCharacter->GetLastMovementInputVector() * -15.0f) + FVector(0.0f, 0.0f, (MinLedgeHeight + MaxLedgeHeight) / 2);
@@ -93,6 +86,7 @@ FIsObjectClimbableOut UTraversalComponent::IsObjectClimbable(float ReachDistance
 
 	bool bHit = UKismetSystemLibrary::CapsuleTraceSingle(GetWorld(), Start, End, 5.0f, HalfHeight, DetectionTraceChannel, false, ActorsToIgnore, EDrawDebugTrace::None, Hit, true);
 	FIsObjectClimbableOut Out;
+
 	if (bHit && !Hit.bStartPenetrating && !PlayerCharacterMovement->IsWalkable(Hit))
 	{
 		Out.bIsNotWalkable = true;
@@ -100,13 +94,8 @@ FIsObjectClimbableOut UTraversalComponent::IsObjectClimbable(float ReachDistance
 		Out.InitialImpactNormal = Hit.ImpactNormal;
 		return Out;
 	}
-	else
-	{
-		Out.bIsNotWalkable = false;
-		Out.InitialImpactPoint = FVector(0.0f, 0.0f, 0.0f);
-		Out.InitialImpactNormal = FVector(0.0f, 0.0f, 0.0f);
-		return Out;
-	}
+	
+	return Out;
 }
 
 FIsSurfaceWalkableOut UTraversalComponent::IsSurfaceWalkable(float MaxLedgeHeight, FVector InitialImpactPoint, FVector InitialImpactNormal)
@@ -118,18 +107,15 @@ FIsSurfaceWalkableOut UTraversalComponent::IsSurfaceWalkable(float MaxLedgeHeigh
 
 	bool bHit = UKismetSystemLibrary::SphereTraceSingle(GetWorld(), Start, End, 5.0f, DetectionTraceChannel, false, ActorsToIgnore, EDrawDebugTrace::ForDuration, Hit, true, FLinearColor::Red);
 	FIsSurfaceWalkableOut Out;
+
 	if (bHit && PlayerCharacterMovement->IsWalkable(Hit))
 	{
 		Out.bIsWalkable = true;
 		Out.WalkableImpactPoint = Hit.ImpactPoint;
 		return Out;
 	}
-	else
-	{
-		Out.bIsWalkable = false;
-		Out.WalkableImpactPoint = FVector(0.0f, 0.0f, 0.0f);
-		return Out;
-	}
+	
+	return Out;
 }
 
 bool UTraversalComponent::IsCapsulePathClear(float Height, FVector EndTargetLocation)
@@ -169,14 +155,12 @@ FAnimationProperties UTraversalComponent::DetermineAnimationProperties(float Hei
 }
 
 
-/* Vault */
+/***** Vault *****/
 
 bool UTraversalComponent::VaultCheck()
 {
 	if (TraversalState != ETraversalState::None || PlayerCharacterMovement->IsFalling())
-	{
 		return false;
-	}
 
 	FVector InitialTraceImpactPoint;
 	FVector InitialTraceImpactNormal;
@@ -199,9 +183,7 @@ bool UTraversalComponent::VaultCheck()
 
 	// Check if it can start the vault with current approach angle
 	if (ApproachAngle < VaultMaxApproachAngle)
-	{
 		return false;
-	}
 
 	FVector WalkableImpactPoint;
 
@@ -214,13 +196,10 @@ bool UTraversalComponent::VaultCheck()
 		ObjectStartWarpTarget = WalkableImpactPoint;
 		FVector VaultHeightVec = GetCapsuleLocationFromBaseLocation(WalkableImpactPoint) - PlayerCharacter->GetActorLocation();
 		VaultHeight = VaultHeightVec.Z;
-		UE_LOG(LogTemp, Display, TEXT("Vault height: %f"), VaultHeight);
 
 		// Check if vault height isn't higher than the max vault ledge height
 		if (VaultHeight >= VaultMaxLedgeHeight)
-		{
 			return false;
-		}
 	}
 	else
 	{
@@ -246,9 +225,7 @@ bool UTraversalComponent::VaultCheck()
 	bool bIsPathClear = IsCapsulePathClear(VaultHeight, EndTargetLocation);
 
 	if (!bIsPathClear)
-	{
 		return false;
-	}
 
 	// Determine correct vault animation properties based on vault height
 	FAnimationProperties VaultAnimationProperties = DetermineAnimationProperties(VaultHeight, VaultAnimationPropertySettings);
@@ -259,10 +236,8 @@ bool UTraversalComponent::VaultCheck()
 		VaultStart(VaultAnimationProperties.Animation, VaultAnimationProperties.AnimationEndBlendTime);
 		return true;
 	}
-	else
-	{
-		return false;
-	}
+
+	return false;
 }
 
 FCanVaultOverDepthOut UTraversalComponent::CanVaultOverDepth()
@@ -272,18 +247,19 @@ FCanVaultOverDepthOut UTraversalComponent::CanVaultOverDepth()
 	TArray<AActor*> ActorsToIgnore;
 	FHitResult Hit;
 
-	bool bHit = UKismetSystemLibrary::LineTraceSingle(GetWorld(), Start, End, DetectionTraceChannel, false, ActorsToIgnore, EDrawDebugTrace::None, Hit, true);
+	bool bReachHit = UKismetSystemLibrary::LineTraceSingle(GetWorld(), Start, End, DetectionTraceChannel, false, ActorsToIgnore, EDrawDebugTrace::None, Hit, true);
 	FCanVaultOverDepthOut Out;
-	if (bHit)
+
+	if (bReachHit)
 	{
 		FVector ReachImpactPoint = Hit.ImpactPoint;
 
 		Start = ReachImpactPoint + PlayerCharacter->GetActorForwardVector() * VaultMaxDepth;
 		End = ReachImpactPoint;
 
-		bHit = UKismetSystemLibrary::LineTraceSingle(GetWorld(), Start, End, DetectionTraceChannel, false, ActorsToIgnore, EDrawDebugTrace::None, Hit, true);
+		bool bDepthHit = UKismetSystemLibrary::LineTraceSingle(GetWorld(), Start, End, DetectionTraceChannel, false, ActorsToIgnore, EDrawDebugTrace::None, Hit, true);
 
-		if (bHit)
+		if (bDepthHit)
 		{
 			FVector DepthImpactPoint = Hit.ImpactPoint;
 			bool bInRange = UKismetMathLibrary::InRange_FloatFloat(UKismetMathLibrary::Vector_Distance(DepthImpactPoint, ReachImpactPoint), VaultMinDepth, VaultMaxDepth);
@@ -294,19 +270,9 @@ FCanVaultOverDepthOut UTraversalComponent::CanVaultOverDepth()
 			Out.DepthImpactPoint = DepthImpactPoint;
 			return Out;
 		}
-		else
-		{
-			Out.bCanVaultOverDepth = false;
-			Out.DepthImpactPoint = FVector(0.0f, 0.0f, 0.0f);
-			return Out;
-		}
 	}
-	else
-	{
-		Out.bCanVaultOverDepth = false;
-		Out.DepthImpactPoint = FVector(0.0f, 0.0f, 0.0f);
-		return Out;
-	}
+
+	return Out;
 }
 
 FVector UTraversalComponent::GetVaultLandPoint(FVector ObjectEndPoint)
@@ -343,12 +309,20 @@ void UTraversalComponent::VaultStart(UAnimMontage* VaultAnimation, float Animati
 
 		float MontageDuration = PlayerCharacter->GetMesh()->GetAnimInstance()->Montage_Play(VaultAnimation, 1.0f, EMontagePlayReturnType::Duration, 0.0f, true);
 		FTimerHandle MontageCompletedTimerHandle;
-		GetWorld()->GetTimerManager().SetTimer(MontageCompletedTimerHandle, this, &UTraversalComponent::OnMontageCompleted, MontageDuration - AnimationEndBlendTime, false);
+		float MontageFinalDuration = MontageDuration - AnimationEndBlendTime;
+		GetWorld()->GetTimerManager().SetTimer(MontageCompletedTimerHandle, FTimerDelegate::CreateUObject(this, &UTraversalComponent::OnVaultMontageCompleted, AnimationEndBlendTime), MontageFinalDuration, false);
 	}
 }
 
+void UTraversalComponent::OnVaultMontageCompleted(float AnimationEndBlendTime)
+{
+	PlayerCharacter->GetMesh()->GetAnimInstance()->Montage_Stop(0.2f, PlayerCharacter->GetMesh()->GetAnimInstance()->GetActiveMontageInstance()->Montage);
+	PlayerCharacterMovement->SetMovementMode(MOVE_Walking);
+	TraversalState = ETraversalState::None;
+}
 
-/* Mantle */
+
+/***** Mantle *****/
 
 bool UTraversalComponent::MantleCheck()
 {
@@ -439,12 +413,20 @@ void UTraversalComponent::MantleStart(const FAnimationProperties& AnimationPrope
 
 		float MontageDuration = PlayerCharacter->GetMesh()->GetAnimInstance()->Montage_Play(AnimationProperties.Animation, 1.0f, EMontagePlayReturnType::Duration, AnimationProperties.AnimationStartingPosition, true);
 		FTimerHandle MontageCompletedTimerHandle;
-		GetWorld()->GetTimerManager().SetTimer(MontageCompletedTimerHandle, this, &UTraversalComponent::OnMontageCompleted, MontageDuration - AnimationProperties.AnimationStartingPosition - AnimationProperties.AnimationEndBlendTime, false);
+		float MontageFinalDuration = MontageDuration - AnimationProperties.AnimationStartingPosition - AnimationProperties.AnimationEndBlendTime;
+		GetWorld()->GetTimerManager().SetTimer(MontageCompletedTimerHandle, FTimerDelegate::CreateUObject(this, &UTraversalComponent::OnMantleMontageCompleted, AnimationProperties.AnimationEndBlendTime), MontageFinalDuration, false);
 	}
 }
 
+void UTraversalComponent::OnMantleMontageCompleted(float AnimationEndBlendTime)
+{
+	PlayerCharacter->GetMesh()->GetAnimInstance()->Montage_Stop(0.2f, PlayerCharacter->GetMesh()->GetAnimInstance()->GetActiveMontageInstance()->Montage);
+	PlayerCharacterMovement->SetMovementMode(MOVE_Walking);
+	TraversalState = ETraversalState::None;
+}
 
-/* Slide */
+
+/***** Slide *****/
 
 //bool UTraversalComponent::CanSlide()
 //{
@@ -533,7 +515,7 @@ void UTraversalComponent::SlideStop()
 }
 
 
-/* Wall climb */
+/***** Wall climb *****/
 
 FHitResult UTraversalComponent::ForwardTrace(FVector Offset)
 {
@@ -582,6 +564,44 @@ void UTraversalComponent::WallClimbStart(FHitResult& ForwardTraceHit)
 	PlayerCharacter->SetActorLocationAndRotation(TargetLocation, TargetRotation);
 }
 
+void UTraversalComponent::WallClimbStop()
+{
+	TraversalState = ETraversalState::None;
+	PlayerCharacterMovement->SetMovementMode(MOVE_Walking);
+	PlayerCharacterMovement->bOrientRotationToMovement = true;
+	PlayerCharacterMovement->StopMovementImmediately();
+
+	WallClimbHorizontalInput = 0.0f;
+	WallClimbVerticalInput = 0.0f;
+}
+
+bool UTraversalComponent::IsRoomToStartWallClimb()
+{
+	TArray<AActor*> ActorsToIgnore;
+
+	FVector TopStart = PlayerCharacter->GetActorLocation() + FVector(0.0f, 0.0f, 1.0f) * DirectionalTraceDistance;
+	FVector TopEnd = TopStart + PlayerCharacter->GetActorForwardVector() * WallDetectionDistance;
+	FHitResult TopHit;
+	UKismetSystemLibrary::LineTraceSingle(GetWorld(), TopStart, TopEnd, DetectionTraceChannel, false, ActorsToIgnore, EDrawDebugTrace::ForDuration, TopHit, true, FLinearColor::Black);
+
+	FVector BottomStart = PlayerCharacter->GetActorLocation() + FVector(0.0f, 0.0f, -1.0f) * DirectionalTraceDistance;
+	FVector BottomEnd = BottomStart + PlayerCharacter->GetActorForwardVector() * WallDetectionDistance;
+	FHitResult BottomHit;
+	UKismetSystemLibrary::LineTraceSingle(GetWorld(), BottomStart, BottomEnd, DetectionTraceChannel, false, ActorsToIgnore, EDrawDebugTrace::ForDuration, BottomHit, true, FLinearColor::Black);
+
+	FVector RightStart = PlayerCharacter->GetActorLocation() + PlayerCharacter->GetActorRightVector() * DirectionalTraceDistance;
+	FVector RightEnd = RightStart + PlayerCharacter->GetActorForwardVector() * WallDetectionDistance;
+	FHitResult RightHit;
+	UKismetSystemLibrary::LineTraceSingle(GetWorld(), RightStart, RightEnd, DetectionTraceChannel, false, ActorsToIgnore, EDrawDebugTrace::ForDuration, RightHit, true, FLinearColor::Black);
+
+	FVector LeftStart = PlayerCharacter->GetActorLocation() + (PlayerCharacter->GetActorRightVector() * -1.0f) * DirectionalTraceDistance;
+	FVector LeftEnd = LeftStart + PlayerCharacter->GetActorForwardVector() * WallDetectionDistance;
+	FHitResult LeftHit;
+	UKismetSystemLibrary::LineTraceSingle(GetWorld(), LeftStart, LeftEnd, DetectionTraceChannel, false, ActorsToIgnore, EDrawDebugTrace::ForDuration, LeftHit, true, FLinearColor::Black);
+
+	return TopHit.bBlockingHit && BottomHit.bBlockingHit && RightHit.bBlockingHit && LeftHit.bBlockingHit && ForwardTrace(FVector(0.0f, 0.0f, 0.0f)).bBlockingHit;
+}
+
 bool UTraversalComponent::IsTurnAngleClimbable(FVector CurrentWallNormal, FVector TargetWallNormal, float MaxTurnAngle)
 {
 	float Dot = FVector::DotProduct(CurrentWallNormal, TargetWallNormal);
@@ -612,15 +632,25 @@ void UTraversalComponent::WallClimbInwardTurnTrace(FVector Direction, float Axis
 
 void UTraversalComponent::WallClimbInwardTurn(float AxisValue)
 {
+	bWallClimbIsTurning = true;
+
 	if (AxisValue < 0.0f)
 	{
-		PlayerCharacter->PlayAnimMontage(LeftInwardTurnAnimation);
-		GEngine->AddOnScreenDebugMessage(-1, 2.0f, FColor::Red, TEXT("Left Inward Turn"));
+		//PlayerCharacter->PlayAnimMontage(LeftInwardTurnAnimation);
+
+		float MontageDuration = PlayerCharacter->GetMesh()->GetAnimInstance()->Montage_Play(LeftInwardTurnAnimation, 1.0f, EMontagePlayReturnType::Duration, 0.0f, true);
+		GetWorld()->GetTimerManager().SetTimer(WallClimbTurnMontageCompletedHandle, this, &UTraversalComponent::OnWallClimbTurnMontageCompleted, MontageDuration, false);
+
+		//GEngine->AddOnScreenDebugMessage(-1, 2.0f, FColor::Red, TEXT("Left Inward Turn"));
 	}
 	else
 	{
-		PlayerCharacter->PlayAnimMontage(RightInwardTurnAnimation);
-		GEngine->AddOnScreenDebugMessage(-1, 2.0f, FColor::Red, TEXT("Right Inward Turn"));
+		//PlayerCharacter->PlayAnimMontage(RightInwardTurnAnimation);
+
+		float MontageDuration = PlayerCharacter->GetMesh()->GetAnimInstance()->Montage_Play(RightInwardTurnAnimation, 1.0f, EMontagePlayReturnType::Duration, 0.0f, true);
+		GetWorld()->GetTimerManager().SetTimer(WallClimbTurnMontageCompletedHandle, this, &UTraversalComponent::OnWallClimbTurnMontageCompleted, MontageDuration, false);
+
+		//GEngine->AddOnScreenDebugMessage(-1, 2.0f, FColor::Red, TEXT("Right Inward Turn"));
 	}
 }
 
@@ -635,49 +665,6 @@ FHitResult UTraversalComponent::WallClimbDirectionalTrace(FVector Direction, flo
 	DrawDebugLine(GetWorld(), Start, End, FColor::Red, false, 1.0f, 1.0f);
 
 	return Hit;
-}
-
-void UTraversalComponent::WallClimbMovement(FVector Direction, float AxisValue)
-{
-	FHitResult ForwardTraceHit = ForwardTrace(FVector(0.0f, 0.0f, 0.0f));
-	//FHitResult ClimbTraceHit;
-
-	FVector CurrentWallNormal = ForwardTraceHit.Normal;
-
-	// Check if there is axis input
-	if (AxisValue != 0.0f)
-	{	
-		WallClimbInwardTurnTrace(Direction, AxisValue, CurrentWallNormal);
-
-		FHitResult DirectionalTraceHit = WallClimbDirectionalTrace(Direction, AxisValue);
-
-		if (DirectionalTraceHit.bBlockingHit)
-		{
-			FVector TargetLocation = DirectionalTraceHit.Location;
-			FVector TargetNormal = DirectionalTraceHit.Normal;
-
-			FVector ClimbUnitDirection = UKismetMathLibrary::GetDirectionUnitVector(PlayerCharacter->GetActorLocation(), TargetLocation + (TargetNormal * PlayerCapsule->GetScaledCapsuleRadius()));
-			FVector ClimbDirection;
-			if (AxisValue > 0.0f)
-			{
-				ClimbDirection = ClimbUnitDirection * 1.0f;
-			}
-			else
-			{
-				ClimbDirection = ClimbUnitDirection * -1.0f;
-			}
-
-			PlayerCharacter->AddMovementInput(ClimbDirection, AxisValue);
-
-			// Adjust player rotation to wall
-			FRotator NewRotation = UKismetMathLibrary::RInterpTo(PlayerCharacter->GetActorRotation(), (TargetNormal * -1.0f).Rotation(), UGameplayStatics::GetWorldDeltaSeconds(GetWorld()), 5.0f);
-			PlayerCharacter->SetActorRotation(NewRotation);
-		}
-		else
-		{
-			WallClimbOutwardTurnTrace(Direction, AxisValue, CurrentWallNormal, DirectionalTraceHit.TraceEnd);
-		}
-	}
 }
 
 void UTraversalComponent::WallClimbOutwardTurnTrace(FVector Direction, float AxisValue, FVector CurrentWallNormal, FVector DirectionalTraceEnd)
@@ -707,49 +694,135 @@ void UTraversalComponent::WallClimbOutwardTurnTrace(FVector Direction, float Axi
 
 void UTraversalComponent::WallClimbOutwardTurn(float AxisValue)
 {
+	bWallClimbIsTurning = true;
 	if (AxisValue < 0.0f)
 	{
-		PlayerCharacter->PlayAnimMontage(LeftOutwardTurnAnimation);
-		GEngine->AddOnScreenDebugMessage(-1, 2.0f, FColor::Red, TEXT("Left Outward Turn"));
+		//PlayerCharacter->PlayAnimMontage(LeftOutwardTurnAnimation);
+
+		float MontageDuration = PlayerCharacter->GetMesh()->GetAnimInstance()->Montage_Play(LeftOutwardTurnAnimation, 1.0f, EMontagePlayReturnType::Duration, 0.0f, true);
+		GetWorld()->GetTimerManager().SetTimer(WallClimbTurnMontageCompletedHandle, this, &UTraversalComponent::OnWallClimbTurnMontageCompleted, MontageDuration, false);
+
+		//GEngine->AddOnScreenDebugMessage(-1, 2.0f, FColor::Red, TEXT("Left Outward Turn"));
 	}
 	else
 	{
-		PlayerCharacter->PlayAnimMontage(RightOutwardTurnAnimation);
-		GEngine->AddOnScreenDebugMessage(-1, 2.0f, FColor::Red, TEXT("Right Outward Turn"));
+		//PlayerCharacter->PlayAnimMontage(RightOutwardTurnAnimation);
+
+		float MontageDuration = PlayerCharacter->GetMesh()->GetAnimInstance()->Montage_Play(RightOutwardTurnAnimation, 1.0f, EMontagePlayReturnType::Duration, 0.0f, true);
+		GetWorld()->GetTimerManager().SetTimer(WallClimbTurnMontageCompletedHandle, this, &UTraversalComponent::OnWallClimbTurnMontageCompleted, MontageDuration, false);
+
+		//GEngine->AddOnScreenDebugMessage(-1, 2.0f, FColor::Red, TEXT("Right Outward Turn"));
 	}
 }
 
-void UTraversalComponent::WallClimbStop()
+void UTraversalComponent::WallClimbMovement(FVector2D Direction)
 {
-	TraversalState = ETraversalState::None;
-	PlayerCharacterMovement->SetMovementMode(MOVE_Walking);
-	PlayerCharacterMovement->bOrientRotationToMovement = true;
-	PlayerCharacterMovement->StopMovementImmediately();
+	FHitResult ForwardTraceHit = ForwardTrace(FVector::ZeroVector);
+	if (!ForwardTraceHit.bBlockingHit)
+	{
+		WallClimbStop();
+		return;
+	}
+
+	FVector WallNormal = ForwardTraceHit.Normal;
+	FVector WallTangent = FVector::CrossProduct(WallNormal, PlayerCharacter->GetActorUpVector()).GetSafeNormal();
+	FVector VerticalDirection = PlayerCharacter->GetActorUpVector().GetSafeNormal() * Direction.Y;
+	FVector HorizontalDirection = WallTangent * Direction.X;
+	FVector ActualDirection = VerticalDirection + HorizontalDirection;
+	UE_LOG(LogTemp, Error, TEXT("WallTangent: %s"), *VerticalDirection.ToString());
+	UE_LOG(LogTemp, Error, TEXT("VerticalDirection: %s"), *VerticalDirection.ToString());
+	UE_LOG(LogTemp, Error, TEXT("HorizontalDirection: %s"), *HorizontalDirection.ToString());
+	UE_LOG(LogTemp, Error, TEXT("ActualDirection: %s"), *ActualDirection.ToString());
+
+	// Check if there is axis input
+	if (!ActualDirection.IsZero())
+	{
+		if (!bWallClimbIsTurning)
+		{
+			SetWallClimbAnimationMovementDirections(ActualDirection);
+			
+			UE_LOG(LogTemp, Error, TEXT("Horizontal input NOT turning: %f"), WallClimbHorizontalInput)
+
+			//WallClimbInwardTurnTrace(Direction, AxisValue, WallNormal);
+
+			//FHitResult DirectionalTraceHit = WallClimbDirectionalTrace(Direction, AxisValue);
+
+			//if (DirectionalTraceHit.bBlockingHit)
+			//{
+			//	FVector TargetLocation = DirectionalTraceHit.Location;
+			//	FVector TargetNormal = DirectionalTraceHit.Normal;
+
+			//	FVector ClimbUnitDirection = UKismetMathLibrary::GetDirectionUnitVector(PlayerCharacter->GetActorLocation(), TargetLocation + (TargetNormal * PlayerCapsule->GetScaledCapsuleRadius()));
+			//	FVector ClimbDirection;
+			//	if (Direction.X > 0.0f || Direction.Y > 0.0f)
+			//	{
+			//		ClimbDirection = ClimbUnitDirection * 1.0f;
+			//	}
+			//	else
+			//	{
+			//		ClimbDirection = ClimbUnitDirection * -1.0f;
+			//	}
+
+				PlayerCharacter->AddMovementInput(ActualDirection, Direction.X == 0 ? Direction.Y : Direction.X);
+			//	// Adjust player rotation to wall
+			//	FRotator NewRotation = UKismetMathLibrary::RInterpTo(PlayerCharacter->GetActorRotation(), (TargetNormal * -1.0f).Rotation(), UGameplayStatics::GetWorldDeltaSeconds(GetWorld()), 5.0f);
+			//	PlayerCharacter->SetActorRotation(NewRotation);
+			//}
+			//else
+			//{
+			//	WallClimbOutwardTurnTrace(Direction, AxisValue, WallNormal, DirectionalTraceHit.TraceEnd);
+			//}
+		}
+
+		UE_LOG(LogTemp, Error, TEXT("Horizontal input turning: %f"), WallClimbHorizontalInput)
+	}
+	else
+	{
+		// Reset values when there's no input
+		SetWallClimbAnimationMovementDirections(FVector::ZeroVector);
+	}
 }
 
-bool UTraversalComponent::IsRoomToStartWallClimb()
+void UTraversalComponent::SetWallClimbAnimationMovementDirections(FVector Direction)
 {
-	TArray<AActor*> ActorsToIgnore;
+	/*if (Direction.X != 0.0f)
+		WallClimbHorizontalInput = Direction.X * 100.0f;
+	if (Direction.Y != 0.0f)
+		WallClimbVerticalInput = Direction.Y * 100.0f;
 
-	FVector TopStart = PlayerCharacter->GetActorLocation() + FVector(0.0f, 0.0f, 1.0f) * DirectionalTraceDistance;
-	FVector TopEnd = TopStart + PlayerCharacter->GetActorForwardVector() * WallDetectionDistance;
-	FHitResult TopHit;
-	UKismetSystemLibrary::LineTraceSingle(GetWorld(), TopStart, TopEnd, DetectionTraceChannel, false, ActorsToIgnore, EDrawDebugTrace::ForDuration, TopHit, true, FLinearColor::Black);
+	if (Direction.X == 0.0f)
+		WallClimbHorizontalInput = 0.0f;
+	if (Direction.Y == 0.0f)
+		WallClimbVerticalInput = 0.0f;*/
 
-	FVector BottomStart = PlayerCharacter->GetActorLocation() + FVector(0.0f, 0.0f, -1.0f) * DirectionalTraceDistance;
-	FVector BottomEnd = BottomStart + PlayerCharacter->GetActorForwardVector() * WallDetectionDistance;
-	FHitResult BottomHit;
-	UKismetSystemLibrary::LineTraceSingle(GetWorld(), BottomStart, BottomEnd, DetectionTraceChannel, false, ActorsToIgnore, EDrawDebugTrace::ForDuration, BottomHit, true, FLinearColor::Black);
+	// Set the blend space values based on direction
+	if (Direction.Z != 0.0f)
+		// Vertical movement (up/down)
+		WallClimbVerticalInput = Direction.Z * 100.0f; // Will give us 100 for up, -100 for down
 
-	FVector RightStart = PlayerCharacter->GetActorLocation() + PlayerCharacter->GetActorRightVector() * DirectionalTraceDistance;
-	FVector RightEnd = RightStart + PlayerCharacter->GetActorForwardVector() * WallDetectionDistance;
-	FHitResult RightHit;
-	UKismetSystemLibrary::LineTraceSingle(GetWorld(), RightStart, RightEnd, DetectionTraceChannel, false, ActorsToIgnore, EDrawDebugTrace::ForDuration, RightHit, true, FLinearColor::Black);
+	if (Direction.Y != 0.0f)
+		// Horizontal movement (left/right)
+		WallClimbHorizontalInput = Direction.Y * 100.0f; // Will give us -100 for left, 100 for right
+	else if (Direction.X != 0.0f)
+		// Horizontal movement (left/right)
+		WallClimbHorizontalInput = Direction.X * 100.0f; // Will give us -100 for left, 100 for right
 
-	FVector LeftStart = PlayerCharacter->GetActorLocation() + (PlayerCharacter->GetActorRightVector() * -1.0f) * DirectionalTraceDistance;
-	FVector LeftEnd = LeftStart + PlayerCharacter->GetActorForwardVector() * WallDetectionDistance;
-	FHitResult LeftHit;
-	UKismetSystemLibrary::LineTraceSingle(GetWorld(), LeftStart, LeftEnd, DetectionTraceChannel, false, ActorsToIgnore, EDrawDebugTrace::ForDuration, LeftHit, true, FLinearColor::Black);
+	// Gradually decay values when there's no input in that direction
+	if (Direction.Z == 0.0f)
+		WallClimbVerticalInput = FMath::FInterpTo(WallClimbVerticalInput, 0.0f, UGameplayStatics::GetWorldDeltaSeconds(GetWorld()), 10.0f);
 
-	return TopHit.bBlockingHit && BottomHit.bBlockingHit && RightHit.bBlockingHit && LeftHit.bBlockingHit && ForwardTrace(FVector(0.0f, 0.0f, 0.0f)).bBlockingHit;
+	if (Direction.Y == 0.0f)
+		WallClimbHorizontalInput = FMath::FInterpTo(WallClimbHorizontalInput, 0.0f, UGameplayStatics::GetWorldDeltaSeconds(GetWorld()), 10.0f);
+	else if (Direction.X == 0.0f)
+		WallClimbHorizontalInput = FMath::FInterpTo(WallClimbHorizontalInput, 0.0f, UGameplayStatics::GetWorldDeltaSeconds(GetWorld()), 10.0f);
+
+	// Clamp final values to ensure they stay within bounds
+	WallClimbHorizontalInput = FMath::Clamp(WallClimbHorizontalInput, -100.0f, 100.0f);
+	WallClimbVerticalInput = FMath::Clamp(WallClimbVerticalInput, -100.0f, 100.0f);
+}
+
+void UTraversalComponent::OnWallClimbTurnMontageCompleted()
+{
+	bWallClimbIsTurning = false;
+	GEngine->AddOnScreenDebugMessage(-1, 2.0f, FColor::Red, TEXT("Turn montage completed"));
 }
